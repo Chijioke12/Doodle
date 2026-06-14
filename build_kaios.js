@@ -93,11 +93,13 @@ async function build() {
     await fs.copy(path.join(__dirname, 'style.css'), path.join(DIST_DIR, 'style.css'));
     await fs.copy(path.join(__dirname, 'controls.css'), path.join(DIST_DIR, 'controls.css'));
 
-    console.log('Generating KaiOS icons (56x56 & 112x112) using sharp...');
+    console.log('Generating KaiOS icons (56x56 & 112x112)...');
     const iconSvg = path.join(__dirname, 'assets', 'alien-monster.svg');
-    const sharp = require('sharp');
+    let iconGenerated = false;
 
+    // Attempt 1: sharp
     try {
+      const sharp = require('sharp');
       const circleSvgMask56 = Buffer.from('<svg><circle cx="28" cy="28" r="28" /></svg>');
       await sharp(iconSvg)
         .resize(56, 56)
@@ -111,9 +113,29 @@ async function build() {
         .composite([{ input: circleSvgMask112, blend: 'dest-in' }])
         .png()
         .toFile(path.join(ASSETS_DIR, 'icon-112.png'));
+      
+      iconGenerated = true;
+      console.log('  ✅ Icons generated using sharp.');
     } catch (e) {
-      console.warn('\\n⚠️  Sharp icon generation failed.');
-      console.warn('  Will copy the SVG as the icon instead.');
+      console.warn('\\n⚠️  Sharp icon generation failed or not available.');
+    }
+
+    // Attempt 2: ImageMagick
+    if (!iconGenerated) {
+      try {
+        console.log('  Attempting to generate icons using ImageMagick...');
+        execSync(`magick "${iconSvg}" -background none -resize 56x56 -gravity center -extent 56x56 \\( +clone -alpha extract -draw "fill black polygon 0,0 0,56 56,56 56,0 fill white circle 28,28 28,0" \\) -alpha off -compose CopyOpacity -composite "${path.join(ASSETS_DIR, 'icon-56.png')}"`, { stdio: 'ignore' });
+        execSync(`magick "${iconSvg}" -background none -resize 112x112 -gravity center -extent 112x112 \\( +clone -alpha extract -draw "fill black polygon 0,0 0,112 112,112 112,0 fill white circle 56,56 56,0" \\) -alpha off -compose CopyOpacity -composite "${path.join(ASSETS_DIR, 'icon-112.png')}"`, { stdio: 'ignore' });
+        iconGenerated = true;
+        console.log('  ✅ Icons generated using ImageMagick.');
+      } catch (e) {
+        console.warn('  ⚠️ ImageMagick not found or failed.');
+      }
+    }
+
+    // Attempt 3: Fallback (copy SVG as .png)
+    if (!iconGenerated) {
+      console.warn('  ⚠️ Will copy the SVG as the icon instead (fallback).');
       await fs.copy(iconSvg, path.join(ASSETS_DIR, 'icon-56.png'));
       await fs.copy(iconSvg, path.join(ASSETS_DIR, 'icon-112.png'));
     }
