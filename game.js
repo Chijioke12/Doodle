@@ -24,14 +24,24 @@ document.getElementById('startBtn').addEventListener('click', startGame);
 const images = {};
 const sfx = {};
 
+let imageErrors = [];
+
 function loadImg(name, src) {
   const img = new Image();
+  img.onerror = () => {
+    if (imageErrors.length < 3) alert('Image failed: ' + src);
+    imageErrors.push(src);
+  };
   img.src = src;
   images[name] = img;
 }
 
 function loadSfx(name, src) {
-  sfx[name] = new Audio(src);
+  const audio = new Audio(src);
+  audio.onerror = () => {
+    console.error('Audio failed: ' + src);
+  };
+  sfx[name] = audio;
 }
 
 function playSfx(name) {
@@ -42,42 +52,42 @@ function playSfx(name) {
 }
 
 // Reverting to use user's uploaded original assets.
-loadImg('bg', '/assets/cosmic-blueprint-grid.svg');
-loadImg('player', '/assets/idle-fall.svg');
-loadImg('playerJump', '/assets/jump-extension.svg');
-loadImg('playerShoot', '/assets/shoot-projectile.svg');
-loadImg('playerDefeat', '/assets/defeat-dizzy.svg');
-loadImg('playerJetpack', '/assets/equipped-jetpack-.svg');
-loadImg('playerPropeller', '/assets/equipped-propeller-.svg');
+loadImg('bg', 'assets/cosmic-blueprint-grid.svg');
+loadImg('player', 'assets/idle-fall.svg');
+loadImg('playerJump', 'assets/jump-extension.svg');
+loadImg('playerShoot', 'assets/shoot-projectile.svg');
+loadImg('playerDefeat', 'assets/defeat-dizzy.svg');
+loadImg('playerJetpack', 'assets/equipped-jetpack-.svg');
+loadImg('playerPropeller', 'assets/equipped-propeller-.svg');
 
-loadImg('platform', '/assets/standard-platform.svg');
-loadImg('movingPlatform', '/assets/moving-platform.svg');
-loadImg('fragilePlatform', '/assets/fragile-platform.svg');
-loadImg('brokenPlatform', '/assets/broken-fragments.svg');
-loadImg('cloudPlatform', '/assets/disappearing-cloud.svg');
+loadImg('platform', 'assets/standard-platform.svg');
+loadImg('movingPlatform', 'assets/moving-platform.svg');
+loadImg('fragilePlatform', 'assets/fragile-platform.svg');
+loadImg('brokenPlatform', 'assets/broken-fragments.svg');
+loadImg('cloudPlatform', 'assets/disappearing-cloud.svg');
 
-loadImg('alien', '/assets/alien-monster.svg');
-loadImg('alienDefeated', '/assets/monster-defeated-.svg');
-loadImg('ufo', '/assets/ufo-abductor.svg');
-loadImg('blackHole', '/assets/black-hole.svg');
+loadImg('alien', 'assets/alien-monster.svg');
+loadImg('alienDefeated', 'assets/monster-defeated-.svg');
+loadImg('ufo', 'assets/ufo-abductor.svg');
+loadImg('blackHole', 'assets/black-hole.svg');
 
-loadImg('projectile', '/assets/plasma-projectile.svg');
+loadImg('projectile', 'assets/plasma-projectile.svg');
 
-loadImg('spring', '/assets/spring-coiled-.svg');
-loadImg('springSprung', '/assets/spring-sprung-.svg');
-loadImg('trampoline', '/assets/trampoline-idle-.svg');
-loadImg('trampolineImpact', '/assets/trampoline-impact-.svg');
+loadImg('spring', 'assets/spring-coiled-.svg');
+loadImg('springSprung', 'assets/spring-sprung-.svg');
+loadImg('trampoline', 'assets/trampoline-idle-.svg');
+loadImg('trampolineImpact', 'assets/trampoline-impact-.svg');
 
-loadImg('propellerPower', '/assets/propeller-idle-.svg');
-loadImg('jetpackPower', '/assets/jetpack-idle-.svg');
+loadImg('propellerPower', 'assets/propeller-idle-.svg');
+loadImg('jetpackPower', 'assets/jetpack-idle-.svg');
 
-loadSfx('jump', '/sfx/jump.wav');
-loadSfx('break', '/sfx/platform_break.wav');
-loadSfx('spring', '/sfx/spring.wav');
-loadSfx('shoot', '/sfx/shoot.wav');
-loadSfx('defeat', '/sfx/defeat.wav');
-loadSfx('powerup', '/sfx/powerup.wav');
-loadSfx('monster_defeat', '/sfx/monster_defeat.wav');
+loadSfx('jump', 'sfx/jump.wav');
+loadSfx('break', 'sfx/platform_break.wav');
+loadSfx('spring', 'sfx/spring.wav');
+loadSfx('shoot', 'sfx/shoot.wav');
+loadSfx('defeat', 'sfx/defeat.wav');
+loadSfx('powerup', 'sfx/powerup.wav');
+loadSfx('monster_defeat', 'sfx/monster_defeat.wav');
 
 // --- Game Objects ---
 let player = {
@@ -474,6 +484,18 @@ function draw() {
   ctx.globalAlpha = 1.0;
 
   ctx.restore();
+  
+  if (imageErrors.length > 0) {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, WIDTH, 20 + Math.min(imageErrors.length, 5) * 15);
+    ctx.fillStyle = 'red';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Img Errs (${imageErrors.length}):`, 5, 12);
+    for (let i = 0; i < Math.min(imageErrors.length, 5); i++) {
+      ctx.fillText(imageErrors[i], 5, 25 + (i * 12));
+    }
+  }
 }
 
 let lastTime = 0;

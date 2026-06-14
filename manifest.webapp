@@ -10,5 +10,6 @@
     "url": "http://example.com"
   },
   "default_locale": "en-US",
-  "type": "web"
+  "type": "web",
+  "fullscreen": "true"
 }
