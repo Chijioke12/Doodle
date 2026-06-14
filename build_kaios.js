@@ -41,13 +41,20 @@ async function build() {
       console.warn('  For full KaiOS compatibility, install FFmpeg on your system.\n');
     }
 
+    const convertedFiles = [];
     for (const wav of wavFiles) {
       const input = path.join(originalSfxDir, wav);
       
       if (hasFfmpeg) {
         const output = path.join(SFX_DIR, wav.replace('.wav', '.ogg'));
         console.log(`  Converting ${wav} -> ${path.basename(output)}`);
-        execSync(`ffmpeg -i "${input}" -acodec libvorbis "${output}" -y`, { stdio: 'ignore' });
+        try {
+          execSync(`ffmpeg -i "${input}" -acodec libvorbis "${output}" -y`, { stdio: 'ignore' });
+          convertedFiles.push(wav);
+        } catch (e) {
+          console.warn(`  ⚠️ Conversion failed for ${wav}, copying original...`);
+          await fs.copy(input, path.join(SFX_DIR, wav));
+        }
       } else {
         console.log(`  Copying ${wav} without conversion...`);
         await fs.copy(input, path.join(SFX_DIR, wav));
@@ -66,8 +73,9 @@ async function build() {
     let mainJs = await fs.readFile(path.join(DIST_DIR, 'game.bundle.js'), 'utf8');
     
     // Switch the .wav references to .ogg if conversion happened
-    if (hasFfmpeg) {
-      mainJs = mainJs.replace(/\.wav/g, '.ogg');
+    for (const wav of convertedFiles) {
+      const regex = new RegExp(wav, 'g');
+      mainJs = mainJs.replace(regex, wav.replace('.wav', '.ogg'));
     }
 
     const babelResult = babel.transformSync(mainJs, {
