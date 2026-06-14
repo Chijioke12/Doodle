@@ -23,10 +23,38 @@ async function build() {
     await fs.ensureDir(ASSETS_DIR);
     await fs.ensureDir(SFX_DIR);
 
-    console.log('Copying visual assets...');
-    await fs.copy(path.join(__dirname, 'assets'), ASSETS_DIR);
+    console.log('Repairing source SVG dimensions (for KaiOS compatibility)...');
+    const originalAssetsDir = path.join(__dirname, 'assets');
+    const sourceFiles = await fs.readdir(originalAssetsDir);
+    for (const file of sourceFiles) {
+      if (file.endsWith('.svg')) {
+        const filePath = path.join(originalAssetsDir, file);
+        let content = await fs.readFile(filePath, 'utf8');
+        const firstTagMatch = content.match(/<svg([^>]+)>/);
+        if (firstTagMatch) {
+          let tagAttrs = firstTagMatch[1];
+          const vbMatch = tagAttrs.match(/viewBox\s*=\s*["']([^"']+)["']/);
+          if (vbMatch) {
+            const parts = vbMatch[1].trim().split(/\s+/).map(Number);
+            if (parts.length === 4) {
+              const w = parts[2];
+              const h = parts[3];
+              tagAttrs = tagAttrs.replace(/\bwidth\s*=\s*["'][^"']*["']/g, '');
+              tagAttrs = tagAttrs.replace(/\bheight\s*=\s*["'][^"']*["']/g, '');
+              tagAttrs = tagAttrs.replace(/\s+/g, ' ').trim();
+              const newTag = `<svg width="${w}" height="${h}" ${tagAttrs}>`;
+              content = content.replace(firstTagMatch[0], newTag);
+              await fs.writeFile(filePath, content, 'utf8');
+            }
+          }
+        }
+      }
+    }
 
-    console.log('Processing Audio (WAV -> OGG)...');
+    console.log('Copying visual assets...');
+    await fs.copy(originalAssetsDir, ASSETS_DIR);
+
+    console.log('Processing Audio (WAV -> OGG/MP3)...');
     const originalSfxDir = path.join(__dirname, 'sfx');
     const wavFiles = (await fs.readdir(originalSfxDir)).filter(f => f.endsWith('.wav'));
     
@@ -44,20 +72,57 @@ async function build() {
     const convertedFiles = [];
     for (const wav of wavFiles) {
       const input = path.join(originalSfxDir, wav);
+      let success = false;
+      const targetOgg = wav.replace('.wav', '.ogg');
+      const outputOgg = path.join(SFX_DIR, targetOgg);
       
       if (hasFfmpeg) {
-        const output = path.join(SFX_DIR, wav.replace('.wav', '.ogg'));
-        console.log(`  Converting ${wav} -> ${path.basename(output)}`);
-        try {
-          execSync(`ffmpeg -i "${input}" -acodec libvorbis "${output}" -y`, { stdio: 'ignore' });
-          convertedFiles.push(wav);
-        } catch (e) {
-          console.warn(`  ⚠️ Conversion failed for ${wav}, copying original...`);
+        const commands = [
+          `ffmpeg -i "${input}" -acodec libvorbis "${outputOgg}" -y`,
+          `ffmpeg -i "${input}" -acodec vorbis "${outputOgg}" -y`,
+          `ffmpeg -i "${input}" -c:a libopus "${outputOgg}" -y`,
+          `ffmpeg -i "${input}" -c:a opus "${outputOgg}" -y`,
+          `ffmpeg -i "${input}" "${outputOgg}" -y`
+        ];
+
+        for (const cmd of commands) {
+          try {
+            execSync(cmd, { stdio: 'ignore' });
+            success = true;
+            break;
+          } catch (e) {}
+        }
+      }
+
+      if (success) {
+        console.log(`  ✅ Converted ${wav} -> ${targetOgg}`);
+        convertedFiles.push({ original: wav, target: targetOgg });
+      } else {
+        // Try fallback to MP3
+        let mp3Success = false;
+        const targetMp3 = wav.replace('.wav', '.mp3');
+        const outputMp3 = path.join(SFX_DIR, targetMp3);
+        if (hasFfmpeg) {
+          const mp3Commands = [
+            `ffmpeg -i "${input}" -acodec libmp3lame "${outputMp3}" -y`,
+            `ffmpeg -i "${input}" "${outputMp3}" -y`
+          ];
+          for (const cmd of mp3Commands) {
+            try {
+              execSync(cmd, { stdio: 'ignore' });
+              mp3Success = true;
+              break;
+            } catch (e) {}
+          }
+        }
+
+        if (mp3Success) {
+          console.log(`  ✅ Converted ${wav} -> ${targetMp3} (MP3 fallback)`);
+          convertedFiles.push({ original: wav, target: targetMp3 });
+        } else {
+          console.log(`  ⚠️ Copying original WAV for ${wav}`);
           await fs.copy(input, path.join(SFX_DIR, wav));
         }
-      } else {
-        console.log(`  Copying ${wav} without conversion...`);
-        await fs.copy(input, path.join(SFX_DIR, wav));
       }
     }
 
@@ -73,9 +138,9 @@ async function build() {
     let mainJs = await fs.readFile(path.join(DIST_DIR, 'game.bundle.js'), 'utf8');
     
     // Switch the .wav references to .ogg if conversion happened
-    for (const wav of convertedFiles) {
-      const regex = new RegExp(wav, 'g');
-      mainJs = mainJs.replace(regex, wav.replace('.wav', '.ogg'));
+    for (const item of convertedFiles) {
+      const regex = new RegExp(item.original, 'g');
+      mainJs = mainJs.replace(regex, item.target);
     }
 
     const babelResult = babel.transformSync(mainJs, {

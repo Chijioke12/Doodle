@@ -25,12 +25,15 @@ const images = {};
 const sfx = {};
 
 let imageErrors = [];
+let renderErrors = [];
 
 function loadImg(name, src) {
   const img = new Image();
   img.onerror = () => {
-    if (imageErrors.length < 3) alert('Image failed: ' + src);
-    imageErrors.push(src);
+    if (imageErrors.length < 5) {
+      imageErrors.push(src);
+      alert('Load failed: ' + src);
+    }
   };
   img.src = src;
   images[name] = img;
@@ -403,18 +406,34 @@ function draw() {
   
   // Background (Static)
   if (images.bg && images.bg.complete && images.bg.naturalHeight !== 0) {
-    ctx.drawImage(images.bg, 0, 0, WIDTH, HEIGHT);
+    try {
+      ctx.drawImage(images.bg, 0, 0, WIDTH, HEIGHT);
+    } catch (err) {
+      console.error("BG draw failed", err);
+      if (renderErrors.length < 5) {
+        renderErrors.push("bg: " + (err.message || err.toString()));
+      }
+    }
   }
   
   ctx.save();
   ctx.translate(0, -cameraY);
 
-  // Defs utility
+  // Defs utility with built-in try...catch to prevent Canvas crashes on older devices
   function drawAssetOrDefault(x, y, w, h, imgName, fallbackColor) {
     if (!imgName) return; // invisible thing
     let img = images[imgName];
     if (img && img.complete && img.naturalHeight !== 0) {
-      ctx.drawImage(img, x, y, w, h);
+      try {
+        ctx.drawImage(img, x, y, w, h);
+      } catch (err) {
+        console.error("Draw image failed for: " + imgName, err);
+        if (renderErrors.length < 5) {
+          renderErrors.push(imgName + ": " + (err.message || err.toString()));
+        }
+        ctx.fillStyle = fallbackColor;
+        ctx.fillRect(x, y, w, h);
+      }
     } else {
       ctx.fillStyle = fallbackColor;
       ctx.fillRect(x, y, w, h);
@@ -485,15 +504,20 @@ function draw() {
 
   ctx.restore();
   
-  if (imageErrors.length > 0) {
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(0, 0, WIDTH, 20 + Math.min(imageErrors.length, 5) * 15);
-    ctx.fillStyle = 'red';
-    ctx.font = '10px sans-serif';
+  // Aggregate errors to display on screen
+  const allErrors = [
+    ...imageErrors.map(e => "Load err: " + e),
+    ...renderErrors.map(e => "Draw err: " + e)
+  ];
+  if (allErrors.length > 0) {
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0, 0, WIDTH, 20 + Math.min(allErrors.length, 10) * 15);
+    ctx.fillStyle = '#EF4444';
+    ctx.font = '10px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`Img Errs (${imageErrors.length}):`, 5, 12);
-    for (let i = 0; i < Math.min(imageErrors.length, 5); i++) {
-      ctx.fillText(imageErrors[i], 5, 25 + (i * 12));
+    ctx.fillText(`Issues (${allErrors.length}):`, 5, 12);
+    for (let i = 0; i < Math.min(allErrors.length, 10); i++) {
+      ctx.fillText(allErrors[i], 5, 25 + (i * 12));
     }
   }
 }
