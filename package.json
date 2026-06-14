@@ -1,0 +1,26 @@
+{
+  "name": "express-example",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build": "node build_kaios.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@google/genai": "^2.4.0",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "sharp": "^0.35.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@babel/preset-env": "^7.29.7",
+    "archiver": "^8.0.0",
+    "esbuild": "^0.25.12",
+    "fs-extra": "^11.3.5",
+    "tsx": "^4.21.0"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "Premium Platformer",
+  "description": "A premium motion game demo.",
+  "launch_path": "/index.html",
+  "icons": {
+    "128": "/assets/icon.png"
+  },
+  "developer": {
+    "name": "Developer",
+    "url": "http://example.com"
+  },
+  "default_locale": "en-US",
+  "type": "web"
+}

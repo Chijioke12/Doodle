@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Premium Platformer</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="controls.css">
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="240" height="320"></canvas>
+    <div id="uiLayer">
+      <div id="scoreDisplay">0</div>
+    </div>
+    <div id="gameOverScreen">
+      <h2 style="margin:0; font-size: 32px; color: #EF4444;">GAME OVER</h2>
+      <p style="margin: 10px 0; font-size: 20px;">Score: <span id="finalScore">0</span></p>
+      <button id="startBtn" class="start-btn">Try Again</button>
+    </div>
+  </div>
+  
+  <div class="controls" id="dpadControls">
+    <div class="dpad">
+      <button class="btn-dpad up" data-key="ArrowUp">▲</button>
+      <div class="dpad-row">
+        <button class="btn-dpad left" data-key="ArrowLeft">◀</button>
+        <button class="btn-dpad center" data-key="Enter">FIRE</button>
+        <button class="btn-dpad right" data-key="ArrowRight">▶</button>
+      </div>
+      <button class="btn-dpad down" data-key="ArrowDown">▼</button>
+    </div>
+  </div>
+
+  <script src="game.js" type="module"></script>
+</body>
+</html>

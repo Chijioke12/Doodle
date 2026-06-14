@@ -1,0 +1,9 @@
+.controls { margin-top: 10px; user-select: none; -webkit-user-select: none; z-index: 10; }
+.dpad { display: flex; flex-direction: column; align-items: center; background: #111; padding: 10px; border-radius: 50%; box-shadow: inset 0 0 15px rgba(0,0,0,1), 0 4px 10px rgba(0,0,0,0.5); }
+.dpad-row { display: flex; gap: 8px; margin: 8px 0; }
+.btn-dpad {
+  width: 50px; height: 50px; background: #333; border: 2px solid #222; border-radius: 8px; color: #ccc; font-size: 18px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 0 #000; display: flex; justify-content: center; align-items: center; transition: transform 0.05s, box-shadow 0.05s; outline: none;
+}
+.btn-dpad:active, .btn-dpad.active { box-shadow: 0 0 0 #000; transform: translateY(4px); background: #444; color: white; }
+.btn-dpad.center { border-radius: 50%; background: #3B82F6; color: #fff; box-shadow: 0 4px 0 #1E3A8A; }
+.btn-dpad.center:active, .btn-dpad.center.active { box-shadow: 0 0 0 #1E3A8A; transform: translateY(4px); }
