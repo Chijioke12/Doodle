@@ -616,15 +616,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: mymindstorm/setup-emsdk@v12
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v14
         with:
           version: 3.1.45
 
       - name: Compile C Game Engine to asm.js
         run: |
           mkdir -p public/kaios_asmjs
-          emcc c_src/doodle_engine.c -I c_src -O3 -s WASM=0 -s LEGACY_GL_EMULATION=1 -o public/kaios_asmjs/doodle_engine.asm.js`}</pre>
+          emcc c_src/doodle_engine.c -I c_src -O3 -s WASM=0 -s LEGACY_GL_EMULATION=1 -o public/kaios_asmjs/doodle_engine.asm.js
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: doodle-jump-kaios-asmjs-bundle
+          path: doodle_jump_kaios.zip`}</pre>
           </div>
         </div>
       )}

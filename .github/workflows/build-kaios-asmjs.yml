@@ -13,10 +13,10 @@ jobs:
 
     steps:
       - name: Checkout Codebase
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Emscripten SDK (emsdk)
-        uses: mymindstorm/setup-emsdk@v12
+        uses: mymindstorm/setup-emsdk@v14
         with:
           version: 3.1.45
 
@@ -54,7 +54,7 @@ jobs:
           cd build/kaios_app && zip -r ../../doodle_jump_kaios.zip .
 
       - name: Upload KaiOS asm.js Bundle Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: doodle-jump-kaios-asmjs-bundle
           path: |
