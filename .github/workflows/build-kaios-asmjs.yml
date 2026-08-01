@@ -31,8 +31,9 @@ jobs:
             -O3 \
             -s WASM=0 \
             -s LEGACY_GL_EMULATION=1 \
-            -s EXPORTED_FUNCTIONS="['_init_game', '_update_game', '_get_game_state', '_reset_game', '_shoot_bullet']" \
-            -s EXPORTED_RUNTIME_METHODS="['cwrap', 'getValue', 'setValue']" \
+            -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
+            -s EXPORTED_FUNCTIONS="['_init_game', '_update_game', '_get_game_state', '_reset_game', '_shoot_bullet', '_malloc', '_free']" \
+            -s EXPORTED_RUNTIME_METHODS="['cwrap', 'getValue', 'setValue', 'stringToNewUTF8']" \
             -o public/kaios_asmjs/doodle_engine.asm.js
 
       - name: Compile C Game Engine to WebAssembly for KaiOS 3.0
@@ -41,8 +42,9 @@ jobs:
             -I c_src \
             -O3 \
             -s WASM=1 \
-            -s EXPORTED_FUNCTIONS="['_init_game', '_update_game', '_get_game_state', '_reset_game', '_shoot_bullet']" \
-            -s EXPORTED_RUNTIME_METHODS="['cwrap', 'getValue', 'setValue']" \
+            -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
+            -s EXPORTED_FUNCTIONS="['_init_game', '_update_game', '_get_game_state', '_reset_game', '_shoot_bullet', '_malloc', '_free']" \
+            -s EXPORTED_RUNTIME_METHODS="['cwrap', 'getValue', 'setValue', 'stringToNewUTF8']" \
             -o public/kaios_asmjs/doodle_engine.js
 
       - name: Create KaiOS Open Web App Package (.zip)

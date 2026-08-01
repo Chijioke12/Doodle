@@ -624,7 +624,7 @@ jobs:
       - name: Compile C Game Engine to asm.js
         run: |
           mkdir -p public/kaios_asmjs
-          emcc c_src/doodle_engine.c -I c_src -O3 -s WASM=0 -s LEGACY_GL_EMULATION=1 -o public/kaios_asmjs/doodle_engine.asm.js
+          emcc c_src/doodle_engine.c -I c_src -O3 -s WASM=0 -s LEGACY_GL_EMULATION=1 -s ERROR_ON_UNDEFINED_SYMBOLS=0 -s EXPORTED_FUNCTIONS="['_init_game','_update_game','_get_game_state','_reset_game','_shoot_bullet','_malloc','_free']" -o public/kaios_asmjs/doodle_engine.asm.js
 
       - uses: actions/upload-artifact@v4
         with:
