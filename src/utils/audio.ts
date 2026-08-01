@@ -209,6 +209,15 @@ class SoundEffects {
       // Safe catch
     }
   }
+
+  public toggleSound(): boolean {
+    this.enabled = !this.enabled;
+    return this.enabled;
+  }
+
+  public isEnabled(): boolean {
+    return this.enabled;
+  }
 }
 
 export const sfx = new SoundEffects();

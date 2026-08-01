@@ -1,0 +1,22 @@
+{
+  "name": "Doodle Jump C Engine",
+  "short_name": "Doodle Jump",
+  "description": "Classic Doodle Jump game for KaiOS feature phones with fast asm.js engine",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#f7f6ed",
+  "theme_color": "#10b981",
+  "icons": [
+    {
+      "src": "/api/assets/doodle_right.png",
+      "sizes": "56x56",
+      "type": "image/png"
+    },
+    {
+      "src": "/api/assets/doodle_right.png",
+      "sizes": "112x112",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["games", "arcade"]
+}

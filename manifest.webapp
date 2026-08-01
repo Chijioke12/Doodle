@@ -1,15 +1,9 @@
 {
-  "name": "Doodle Jump",
-  "description": "Doodle Jump C Engine for KaiOS",
+  "name": "Doodle Jump C Engine",
+  "description": "Classic Doodle Jump game for KaiOS feature phones compiled from C to asm.js",
   "version": "1.0.0",
   "launch_path": "/index.html",
   "type": "web",
-  "fullscreen": "true",
-  "precompile": [
-    "/lib/phaser-3.24.1.min.js",
-    "/kaios_asmjs/doodle_engine.asm.js",
-    "/kaios_asmjs/doodle_engine.js"
-  ],
   "icons": {
     "56": "/api/assets/doodle_right.png",
     "112": "/api/assets/doodle_right.png"
@@ -28,5 +22,6 @@
   "permissions": {
     "device-storage:apps": { "access": "readwrite" }
   },
+  "fullscreen": "true",
   "orientation": ["portrait-primary"]
 }

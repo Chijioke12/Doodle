@@ -3,24 +3,21 @@ import { CDoodleEngine, CGameState } from '../utils/cEngineAdapter';
 import { sfx } from '../utils/audio';
 import {
   Smartphone,
-  Cpu,
-  Code2,
-  GitBranch,
   RotateCcw,
   Volume2,
   VolumeX,
-  Play,
-  Terminal,
   FileCode,
-  Layers,
-  ChevronLeft,
-  ChevronRight,
-  Crosshair,
   Download,
   CheckCircle2,
+  PackageCheck,
 } from 'lucide-react';
 
-export const KaiOSGame: React.FC = () => {
+interface KaiOSGameProps {
+  pureMode?: boolean;
+  onTogglePureMode?: () => void;
+}
+
+export const KaiOSGame: React.FC<KaiOSGameProps> = ({ pureMode = false, onTogglePureMode }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<CDoodleEngine | null>(null);
 
@@ -28,7 +25,335 @@ export const KaiOSGame: React.FC = () => {
   const [pressedKey, setPressedKey] = useState<string | null>(null);
   const [moveDir, setMoveDir] = useState<number>(0);
   const [shootPressed, setShootPressed] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'simulator' | 'c_memory' | 'c_code' | 'github_actions'>('simulator');
+  const [engineType, setEngineType] = useState<'phaser324' | 'c_asmjs'>('phaser324');
+
+  // Input refs for real-time game loop access without closure staleness
+  const moveDirRef = useRef<number>(0);
+  const activeSceneRef = useRef<any>(null);
+
+  // Phaser 3.24.1 Container Ref
+  const phaserContainerRef = useRef<HTMLDivElement | null>(null);
+  const phaserGameRef = useRef<any>(null);
+
+  // Interactive control handlers for phone simulator buttons & keyboard
+  const handleStartMoveLeft = () => {
+    moveDirRef.current = -1;
+    setMoveDir(-1);
+    setPressedKey('4');
+  };
+
+  const handleStartMoveRight = () => {
+    moveDirRef.current = 1;
+    setMoveDir(1);
+    setPressedKey('6');
+  };
+
+  const handleStopMove = () => {
+    moveDirRef.current = 0;
+    setMoveDir(0);
+    setPressedKey(null);
+  };
+
+  const handleShoot = () => {
+    setShootPressed(true);
+    setPressedKey('5');
+    setTimeout(() => {
+      setShootPressed(false);
+      setPressedKey(null);
+    }, 150);
+
+    if (activeSceneRef.current) {
+      if (activeSceneRef.current.isGameOver) {
+        activeSceneRef.current.scene.restart();
+      } else {
+        activeSceneRef.current.shootPellet();
+      }
+    }
+    if (engineRef.current) {
+      engineRef.current.shootBullet();
+    }
+  };
+
+  const handleRestart = () => {
+    setPressedKey('SoftRight');
+    setTimeout(() => setPressedKey(null), 150);
+
+    if (activeSceneRef.current) {
+      activeSceneRef.current.scene.restart();
+    }
+    if (engineRef.current) {
+      engineRef.current.initGame(240, 320);
+    }
+  };
+
+  const handleToggleSound = () => {
+    setPressedKey('*');
+    setTimeout(() => setPressedKey(null), 150);
+    sfx.toggleSound();
+    setSoundEnabled(sfx.isEnabled());
+  };
+
+  // Initialize C Engine
+  useEffect(() => {
+    if (engineType !== 'c_asmjs') return;
+
+    const engine = new CDoodleEngine(240, 320);
+    engineRef.current = engine;
+    setGameState(engine.getState());
+
+    let animationFrameId: number;
+    let lastTime = performance.now();
+
+    const loop = (time: number) => {
+      const dt = Math.min((time - lastTime) / 1000, 0.05);
+      lastTime = time;
+
+      if (engineRef.current && canvasRef.current) {
+        // Update C Engine Physics
+        engineRef.current.updateGame(dt, moveDir, shootPressed);
+        const state = engineRef.current.getState();
+        setGameState({ ...state });
+
+        // Draw Frame to KaiOS 240x320 Canvas
+        const ctx = canvasRef.current.getContext('2d');
+        if (ctx) {
+          renderKaiOSFrame(ctx, state);
+        }
+      }
+
+      animationFrameId = requestAnimationFrame(loop);
+    };
+
+    animationFrameId = requestAnimationFrame(loop);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [moveDir, shootPressed, engineType]);
+
+  // Initialize Phaser 3.24.1 Game on KaiOS 240x320 Viewport
+  useEffect(() => {
+    if (engineType !== 'phaser324') return;
+
+    let isMounted = true;
+
+    const loadPhaserScript = () => {
+      return new Promise<void>((resolve, reject) => {
+        if ((window as any).Phaser) {
+          resolve();
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = '/lib/phaser-3.24.1.min.js';
+        script.onload = () => resolve();
+        script.onerror = (err) => reject(err);
+        document.body.appendChild(script);
+      });
+    };
+
+    loadPhaserScript().then(() => {
+      if (!isMounted || !phaserContainerRef.current) return;
+
+      const Phaser = (window as any).Phaser;
+      if (!Phaser) return;
+
+      if (phaserGameRef.current) {
+        phaserGameRef.current.destroy(true);
+      }
+
+      class KaiOSDoodleScene extends Phaser.Scene {
+        private player: any;
+        private platforms: any;
+        private bullets: any;
+        private score: number = 0;
+        private scoreText: any;
+        private isGameOver: boolean = false;
+        private gameOverText: any;
+        private keys: any = {};
+
+        constructor() {
+          super({ key: 'KaiOSDoodleScene' });
+        }
+
+        preload() {
+          // Preload KaiOS assets from Express canvas endpoints
+          this.load.image('doodle_right', '/api/assets/doodle_right.png');
+          this.load.image('doodle_left', '/api/assets/doodle_left.png');
+          this.load.image('platform_green', '/api/assets/platform_green.png');
+          this.load.image('platform_blue', '/api/assets/platform_blue.png');
+        }
+
+        create() {
+          activeSceneRef.current = this;
+          this.cameras.main.setBackgroundColor('#f7f6ed');
+
+          // Add Notebook lines
+          const graphics = this.add.graphics();
+          graphics.lineStyle(1, 0xe0f2fe, 1);
+          for (let y = 0; y < 320; y += 16) {
+            graphics.lineBetween(0, y, 240, y);
+          }
+
+          // Platforms Group
+          this.platforms = this.physics.add.staticGroup();
+
+          // Base starting platform
+          const basePlat = this.platforms.create(120, 300, 'platform_green');
+          basePlat.setDisplaySize(48, 12).refreshBody();
+
+          for (let i = 0; i < 7; i++) {
+            const px = Phaser.Math.Between(30, 210);
+            const py = 300 - i * 42;
+            const p = this.platforms.create(px, py, i % 2 === 0 ? 'platform_green' : 'platform_blue');
+            p.setDisplaySize(48, 12).refreshBody();
+          }
+
+          // Doodler Player
+          this.player = this.physics.add.sprite(120, 240, 'doodle_right');
+          this.player.setDisplaySize(32, 32);
+          this.player.setBounce(0);
+          this.player.setCollideWorldBounds(false);
+          this.player.body.setGravityY(700);
+
+          // Bullets
+          this.bullets = this.physics.add.group();
+
+          // Collisions - One-way platform jump-through physics
+          this.physics.add.collider(
+            this.player,
+            this.platforms,
+            (playerObj: any, platformObj: any) => {
+              if (playerObj.body.touching.down) {
+                playerObj.setVelocityY(-460);
+                sfx.playJump();
+              }
+            },
+            (playerObj: any, platformObj: any) => {
+              // Only collide if player is falling downward and player feet are at/above platform top
+              return playerObj.body.velocity.y > 0 && playerObj.body.bottom <= platformObj.body.top + 14;
+            }
+          );
+
+          // HUD
+          this.scoreText = this.add.text(8, 4, 'SCORE: 0', {
+            fontSize: '11px',
+            fontFamily: 'monospace',
+            color: '#0f172a',
+            fontStyle: 'bold',
+          });
+
+          // KaiOS Keyboard Listeners
+          this.input.keyboard.on('keydown', (event: KeyboardEvent) => {
+            if (['ArrowLeft', '4', 'a', 'A'].includes(event.key)) {
+              this.keys.left = true;
+            } else if (['ArrowRight', '6', 'd', 'D'].includes(event.key)) {
+              this.keys.right = true;
+            } else if (['ArrowUp', '5', 'Enter', ' '].includes(event.key)) {
+              this.shootPellet();
+            } else if (['Backspace', 'SoftRight'].includes(event.key)) {
+              if (this.isGameOver) this.scene.restart();
+            }
+          });
+
+          this.input.keyboard.on('keyup', (event: KeyboardEvent) => {
+            if (['ArrowLeft', '4', 'a', 'A'].includes(event.key)) {
+              this.keys.left = false;
+            } else if (['ArrowRight', '6', 'd', 'D'].includes(event.key)) {
+              this.keys.right = false;
+            }
+          });
+        }
+
+        shootPellet() {
+          if (this.isGameOver) return;
+          const bullet = this.add.circle(this.player.x, this.player.y - 12, 4, 0xef4444);
+          this.physics.add.existing(bullet);
+          (bullet.body as any).setVelocityY(-600);
+          this.bullets.add(bullet);
+          sfx.playShoot();
+        }
+
+        update() {
+          if (this.isGameOver) return;
+
+          // Horizontal movement
+          if (this.keys.left || moveDirRef.current === -1) {
+            this.player.setVelocityX(-220);
+            this.player.setTexture('doodle_left');
+          } else if (this.keys.right || moveDirRef.current === 1) {
+            this.player.setVelocityX(220);
+            this.player.setTexture('doodle_right');
+          } else {
+            this.player.setVelocityX(0);
+          }
+
+          // Screen Wrap
+          if (this.player.x < 0) this.player.x = 240;
+          else if (this.player.x > 240) this.player.x = 0;
+
+          // Camera Scroll up
+          if (this.player.y < 160) {
+            const diff = 160 - this.player.y;
+            this.player.y = 160;
+            this.score += Math.floor(diff);
+            this.scoreText.setText(`SCORE: ${this.score}`);
+
+            this.platforms.getChildren().forEach((p: any) => {
+              p.y += diff;
+              p.refreshBody();
+              if (p.y > 340) {
+                p.y = 10;
+                p.x = Phaser.Math.Between(30, 210);
+                p.refreshBody();
+              }
+            });
+          }
+
+          // Fall off bottom -> Game Over
+          if (this.player.y > 340) {
+            this.isGameOver = true;
+            this.add.rectangle(120, 160, 240, 80, 0x000000, 0.8);
+            this.add.text(120, 140, 'GAME OVER!', {
+              fontSize: '16px',
+              color: '#ef4444',
+              fontStyle: 'bold',
+            }).setOrigin(0.5);
+            this.add.text(120, 165, 'Press 5 / SoftRight to Restart', {
+              fontSize: '10px',
+              color: '#ffffff',
+            }).setOrigin(0.5);
+          }
+        }
+      }
+
+      const config = {
+        type: Phaser.WEBGL, // WebGL renderer
+        width: 240,
+        height: 320,
+        parent: phaserContainerRef.current,
+        physics: {
+          default: 'arcade',
+          arcade: {
+            gravity: { y: 0 },
+            debug: false,
+          },
+        },
+        scene: [KaiOSDoodleScene],
+      };
+
+      phaserGameRef.current = new Phaser.Game(config);
+    }).catch((err) => {
+      console.error('Failed to load Phaser 3.24.1 min script:', err);
+    });
+
+    return () => {
+      isMounted = false;
+      if (phaserGameRef.current) {
+        phaserGameRef.current.destroy(true);
+        phaserGameRef.current = null;
+      }
+    };
+  }, [engineType]);
 
   // HUD & Engine Inspector state
   const [gameState, setGameState] = useState<CGameState | null>(null);
@@ -73,32 +398,23 @@ export const KaiOSGame: React.FC = () => {
   // Handle Hardware Key Listeners for KaiOS D-Pad & Keypad
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (['ArrowLeft', '4', 'a', 'A'].includes(e.key)) {
-        setMoveDir(-1);
-        setPressedKey('4');
-      } else if (['ArrowRight', '6', 'd', 'D'].includes(e.key)) {
-        setMoveDir(1);
-        setPressedKey('6');
-      } else if (['ArrowUp', '5', 'Enter', ' ', 'SoftLeft'].includes(e.key)) {
-        setShootPressed(true);
-        setPressedKey('5');
-        sfx.playShoot();
-      } else if (['Backspace', 'SoftRight'].includes(e.key)) {
-        if (engineRef.current) {
-          engineRef.current.initGame(240, 320);
-        }
-        setPressedKey('SoftRight');
+      if (['ArrowLeft', '4', 'a', 'A', '1', '7'].includes(e.key)) {
+        handleStartMoveLeft();
+      } else if (['ArrowRight', '6', 'd', 'D', '3', '9'].includes(e.key)) {
+        handleStartMoveRight();
+      } else if (['ArrowUp', '5', 'Enter', ' ', 'SoftLeft', '2', '8', '#'].includes(e.key)) {
+        handleShoot();
+      } else if (['Backspace', 'SoftRight', '0'].includes(e.key)) {
+        handleRestart();
+      } else if (e.key === '*') {
+        handleToggleSound();
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (['ArrowLeft', '4', 'a', 'A', 'ArrowRight', '6', 'd', 'D'].includes(e.key)) {
-        setMoveDir(0);
+      if (['ArrowLeft', '4', 'a', 'A', '1', '7', 'ArrowRight', '6', 'd', 'D', '3', '9'].includes(e.key)) {
+        handleStopMove();
       }
-      if (['ArrowUp', '5', 'Enter', ' ', 'SoftLeft'].includes(e.key)) {
-        setShootPressed(false);
-      }
-      setPressedKey(null);
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -240,72 +556,30 @@ export const KaiOSGame: React.FC = () => {
     }
   };
 
+  if (pureMode) {
+    return (
+      <div className="fixed inset-0 bg-black flex items-center justify-center p-0 m-0 overflow-hidden select-none z-50">
+        <div className="w-[240px] h-[320px] bg-slate-100 overflow-hidden relative shadow-2xl">
+          <div ref={phaserContainerRef} className="w-[240px] h-[320px] overflow-hidden" />
+        </div>
+        {onTogglePureMode && (
+          <button
+            onClick={onTogglePureMode}
+            className="absolute top-2 right-2 z-50 bg-slate-900/80 hover:bg-slate-800 text-slate-300 px-2 py-1 rounded text-[10px] border border-slate-700 opacity-20 hover:opacity-100 transition-opacity cursor-pointer"
+            title="Exit Pure Mode"
+          >
+            Show Desktop UI
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center justify-center space-y-6 max-w-5xl mx-auto">
-      {/* Navigation Tabs for KaiOS & C Engine */}
-      <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-xs w-full flex items-center justify-between overflow-x-auto gap-2">
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => setActiveTab('simulator')}
-            className={`px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-              activeTab === 'simulator'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            <Smartphone className="w-4 h-4" /> KaiOS Phone Simulator
-          </button>
-
-          <button
-            onClick={() => setActiveTab('c_memory')}
-            className={`px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-              activeTab === 'c_memory'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            <Cpu className="w-4 h-4" /> C Struct Memory Inspector
-          </button>
-
-          <button
-            onClick={() => setActiveTab('c_code')}
-            className={`px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-              activeTab === 'c_code'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            <Code2 className="w-4 h-4" /> C Source Code
-          </button>
-
-          <button
-            onClick={() => setActiveTab('github_actions')}
-            className={`px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-              activeTab === 'github_actions'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            <GitBranch className="w-4 h-4" /> GitHub Actions (asm.js)
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <a
-            href="/public/manifest.webapp"
-            download="manifest.webapp"
-            className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg"
-            title="Download KaiOS 2.5 manifest.webapp"
-          >
-            <Download className="w-3.5 h-3.5 text-emerald-600" /> manifest.webapp
-          </a>
-        </div>
-      </div>
-
-      {/* Main View Area */}
-      {activeTab === 'simulator' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 w-full items-start">
-          {/* KaiOS Phone Frame Hardware Simulation */}
+      {/* Main View Area - Direct KaiOS Phone Simulator */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 w-full items-start">
+        {/* KaiOS Phone Frame Hardware Simulation */}
           <div className="lg:col-span-5 flex justify-center">
             <div className="bg-slate-900 p-5 rounded-[40px] border-4 border-slate-700 shadow-2xl w-[310px] flex flex-col items-center select-none relative">
               {/* Phone Speaker Earpiece */}
@@ -313,15 +587,8 @@ export const KaiOSGame: React.FC = () => {
 
               {/* KaiOS 240x320 QVGA Screen Container */}
               <div className="w-[240px] h-[320px] bg-slate-100 rounded-lg overflow-hidden border-2 border-slate-800 relative shadow-inner">
-                {/* KaiOS Status Bar */}
-                <div className="bg-emerald-800 text-white text-[9px] px-2 py-0.5 flex justify-between items-center font-mono z-10">
-                  <span>KaiOS 2.5</span>
-                  <span>12:00</span>
-                  <span>100% 🔋</span>
-                </div>
-
-                {/* Game Canvas */}
-                <canvas ref={canvasRef} width={240} height={320} className="w-full h-full block" />
+                {/* Game Container running Phaser 3.24.1 */}
+                <div ref={phaserContainerRef} className="w-[240px] h-[320px] overflow-hidden" />
               </div>
 
               {/* KaiOS Keypad Controls */}
@@ -329,8 +596,8 @@ export const KaiOSGame: React.FC = () => {
                 {/* Softkeys & D-Pad Center */}
                 <div className="grid grid-cols-3 gap-2 w-full text-center">
                   <button
-                    onClick={triggerRestart}
-                    className={`py-2 text-[10px] font-bold rounded-lg transition-colors ${
+                    onClick={handleRestart}
+                    className={`py-2 text-[10px] font-bold rounded-lg transition-colors cursor-pointer active:scale-95 ${
                       pressedKey === 'SoftLeft' ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
                     }`}
                   >
@@ -338,10 +605,8 @@ export const KaiOSGame: React.FC = () => {
                   </button>
 
                   <button
-                    onClick={() => {
-                      if (engineRef.current) engineRef.current.shootBullet();
-                    }}
-                    className={`py-2 text-[10px] font-bold rounded-lg border border-emerald-500/30 transition-colors ${
+                    onClick={handleShoot}
+                    className={`py-2 text-[10px] font-bold rounded-lg border border-emerald-500/30 transition-colors cursor-pointer active:scale-95 ${
                       pressedKey === '5' ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-emerald-400 hover:bg-slate-700'
                     }`}
                   >
@@ -349,8 +614,8 @@ export const KaiOSGame: React.FC = () => {
                   </button>
 
                   <button
-                    onClick={triggerRestart}
-                    className={`py-2 text-[10px] font-bold rounded-lg transition-colors ${
+                    onClick={handleRestart}
+                    className={`py-2 text-[10px] font-bold rounded-lg transition-colors cursor-pointer active:scale-95 ${
                       pressedKey === 'SoftRight' ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
                     }`}
                   >
@@ -362,50 +627,57 @@ export const KaiOSGame: React.FC = () => {
                 <div className="grid grid-cols-3 gap-1.5 w-36">
                   <div />
                   <button
-                    onClick={() => {
-                      if (engineRef.current) engineRef.current.shootBullet();
-                    }}
-                    className="py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-xs"
+                    onClick={handleShoot}
+                    className={`py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-xs cursor-pointer active:scale-95 ${
+                      pressedKey === '2' ? 'bg-emerald-500 text-white' : ''
+                    }`}
                   >
                     ▲
                   </button>
                   <div />
 
                   <button
-                    onMouseDown={() => setMoveDir(-1)}
-                    onMouseUp={() => setMoveDir(0)}
-                    onTouchStart={() => setMoveDir(-1)}
-                    onTouchEnd={() => setMoveDir(0)}
-                    className={`py-2.5 font-bold rounded-lg text-xs transition-colors ${
-                      moveDir === -1 ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+                    onMouseDown={handleStartMoveLeft}
+                    onMouseUp={handleStopMove}
+                    onMouseLeave={handleStopMove}
+                    onTouchStart={handleStartMoveLeft}
+                    onTouchEnd={handleStopMove}
+                    className={`py-2.5 font-bold rounded-lg text-xs transition-colors cursor-pointer active:scale-95 ${
+                      moveDir === -1 ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
                     }`}
                   >
                     ◄
                   </button>
 
                   <button
-                    onClick={() => {
-                      if (engineRef.current) engineRef.current.shootBullet();
-                    }}
-                    className="py-2.5 bg-emerald-600 text-white font-bold rounded-lg text-xs shadow-xs"
+                    onClick={handleShoot}
+                    className={`py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer active:scale-95 ${
+                      pressedKey === '5' ? 'bg-emerald-400 text-slate-900' : ''
+                    }`}
                   >
                     ●
                   </button>
 
                   <button
-                    onMouseDown={() => setMoveDir(1)}
-                    onMouseUp={() => setMoveDir(0)}
-                    onTouchStart={() => setMoveDir(1)}
-                    onTouchEnd={() => setMoveDir(0)}
-                    className={`py-2.5 font-bold rounded-lg text-xs transition-colors ${
-                      moveDir === 1 ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+                    onMouseDown={handleStartMoveRight}
+                    onMouseUp={handleStopMove}
+                    onMouseLeave={handleStopMove}
+                    onTouchStart={handleStartMoveRight}
+                    onTouchEnd={handleStopMove}
+                    className={`py-2.5 font-bold rounded-lg text-xs transition-colors cursor-pointer active:scale-95 ${
+                      moveDir === 1 ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
                     }`}
                   >
                     ►
                   </button>
 
                   <div />
-                  <button className="py-2.5 bg-slate-800 text-slate-500 font-bold rounded-lg text-xs cursor-not-allowed">
+                  <button
+                    onClick={handleShoot}
+                    className={`py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-xs cursor-pointer active:scale-95 ${
+                      pressedKey === '8' ? 'bg-emerald-500 text-white' : ''
+                    }`}
+                  >
                     ▼
                   </button>
                   <div />
@@ -413,14 +685,48 @@ export const KaiOSGame: React.FC = () => {
 
                 {/* Numeric Keypad Grid */}
                 <div className="grid grid-cols-3 gap-1.5 w-full text-xs font-mono font-bold text-slate-300">
-                  <div className="p-2 bg-slate-800 rounded-md text-center">1</div>
-                  <div className="p-2 bg-slate-800 rounded-md text-center">2</div>
-                  <div className="p-2 bg-slate-800 rounded-md text-center">3</div>
+                  <button
+                    onMouseDown={handleStartMoveLeft}
+                    onMouseUp={handleStopMove}
+                    onMouseLeave={handleStopMove}
+                    onTouchStart={handleStartMoveLeft}
+                    onTouchEnd={handleStopMove}
+                    className={`p-2 rounded-md text-center transition-colors cursor-pointer active:scale-95 ${
+                      pressedKey === '1' || pressedKey === '4' ? 'bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                    }`}
+                  >
+                    1 ◄
+                  </button>
 
                   <button
-                    onMouseDown={() => setMoveDir(-1)}
-                    onMouseUp={() => setMoveDir(0)}
-                    className={`p-2 rounded-md text-center transition-colors ${
+                    onClick={handleShoot}
+                    className={`p-2 rounded-md text-center transition-colors cursor-pointer active:scale-95 ${
+                      pressedKey === '2' ? 'bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-emerald-400'
+                    }`}
+                  >
+                    2 ▲
+                  </button>
+
+                  <button
+                    onMouseDown={handleStartMoveRight}
+                    onMouseUp={handleStopMove}
+                    onMouseLeave={handleStopMove}
+                    onTouchStart={handleStartMoveRight}
+                    onTouchEnd={handleStopMove}
+                    className={`p-2 rounded-md text-center transition-colors cursor-pointer active:scale-95 ${
+                      pressedKey === '3' || pressedKey === '6' ? 'bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                    }`}
+                  >
+                    3 ►
+                  </button>
+
+                  <button
+                    onMouseDown={handleStartMoveLeft}
+                    onMouseUp={handleStopMove}
+                    onMouseLeave={handleStopMove}
+                    onTouchStart={handleStartMoveLeft}
+                    onTouchEnd={handleStopMove}
+                    className={`p-2 rounded-md text-center transition-colors cursor-pointer active:scale-95 ${
                       pressedKey === '4' ? 'bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-emerald-400'
                     }`}
                   >
@@ -428,10 +734,8 @@ export const KaiOSGame: React.FC = () => {
                   </button>
 
                   <button
-                    onClick={() => {
-                      if (engineRef.current) engineRef.current.shootBullet();
-                    }}
-                    className={`p-2 rounded-md text-center transition-colors ${
+                    onClick={handleShoot}
+                    className={`p-2 rounded-md text-center transition-colors cursor-pointer active:scale-95 ${
                       pressedKey === '5' ? 'bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-emerald-400'
                     }`}
                   >
@@ -439,61 +743,112 @@ export const KaiOSGame: React.FC = () => {
                   </button>
 
                   <button
-                    onMouseDown={() => setMoveDir(1)}
-                    onMouseUp={() => setMoveDir(0)}
-                    className={`p-2 rounded-md text-center transition-colors ${
+                    onMouseDown={handleStartMoveRight}
+                    onMouseUp={handleStopMove}
+                    onMouseLeave={handleStopMove}
+                    onTouchStart={handleStartMoveRight}
+                    onTouchEnd={handleStopMove}
+                    className={`p-2 rounded-md text-center transition-colors cursor-pointer active:scale-95 ${
                       pressedKey === '6' ? 'bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-emerald-400'
                     }`}
                   >
                     6 ►
                   </button>
 
-                  <div className="p-2 bg-slate-800 rounded-md text-center">7</div>
-                  <div className="p-2 bg-slate-800 rounded-md text-center">8</div>
-                  <div className="p-2 bg-slate-800 rounded-md text-center">9</div>
-                  <div className="p-2 bg-slate-800 rounded-md text-center">*</div>
-                  <div className="p-2 bg-slate-800 rounded-md text-center">0</div>
-                  <div className="p-2 bg-slate-800 rounded-md text-center">#</div>
+                  <button
+                    onMouseDown={handleStartMoveLeft}
+                    onMouseUp={handleStopMove}
+                    onMouseLeave={handleStopMove}
+                    onTouchStart={handleStartMoveLeft}
+                    onTouchEnd={handleStopMove}
+                    className={`p-2 rounded-md text-center transition-colors cursor-pointer active:scale-95 ${
+                      pressedKey === '7' ? 'bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                    }`}
+                  >
+                    7 ◄
+                  </button>
+
+                  <button
+                    onClick={handleShoot}
+                    className={`p-2 rounded-md text-center transition-colors cursor-pointer active:scale-95 ${
+                      pressedKey === '8' ? 'bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                    }`}
+                  >
+                    8 ▼
+                  </button>
+
+                  <button
+                    onMouseDown={handleStartMoveRight}
+                    onMouseUp={handleStopMove}
+                    onMouseLeave={handleStopMove}
+                    onTouchStart={handleStartMoveRight}
+                    onTouchEnd={handleStopMove}
+                    className={`p-2 rounded-md text-center transition-colors cursor-pointer active:scale-95 ${
+                      pressedKey === '9' ? 'bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                    }`}
+                  >
+                    9 ►
+                  </button>
+
+                  <button
+                    onClick={handleToggleSound}
+                    className={`p-2 rounded-md text-center transition-colors cursor-pointer active:scale-95 ${
+                      pressedKey === '*' ? 'bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-amber-400'
+                    }`}
+                    title="Toggle Audio Effects"
+                  >
+                    * {soundEnabled ? '🔊' : '🔇'}
+                  </button>
+
+                  <button
+                    onClick={handleRestart}
+                    className={`p-2 rounded-md text-center transition-colors cursor-pointer active:scale-95 ${
+                      pressedKey === '0' || pressedKey === 'SoftRight' ? 'bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-sky-400'
+                    }`}
+                    title="Reset / Restart Game"
+                  >
+                    0 🔄
+                  </button>
+
+                  <button
+                    onClick={handleShoot}
+                    className={`p-2 rounded-md text-center transition-colors cursor-pointer active:scale-95 ${
+                      pressedKey === '#' ? 'bg-emerald-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-emerald-400'
+                    }`}
+                    title="Shoot Nose Pellet"
+                  >
+                    # 🎯
+                  </button>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Feature Information & Instructions */}
+          {/* Key Binds & KaiOS 2.5 Quick Specs */}
           <div className="lg:col-span-7 space-y-4">
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
-              <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
-                <Cpu className="w-5 h-5 text-emerald-600" /> Pure C Engine Compiled to asm.js / Wasm
-              </h3>
-              <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                KaiOS feature phones (JioPhone, Nokia 2720, Alcatel Smartflip) run on KaiOS 2.5 (Firefox 48 Gecko engine) or KaiOS 3.0.
-                By writing the game engine in <strong>pure C (<code className="text-emerald-700 font-mono">c_src/doodle_engine.c</code>)</strong> and compiling it to <strong>asm.js / WebAssembly</strong> with Emscripten, the game achieves stable 60 FPS performance even on low-spec 512MB RAM KaiOS devices!
-              </p>
-            </div>
-
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
               <h4 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                <Smartphone className="w-4 h-4 text-emerald-600" /> KaiOS Physical Keyboard Binds
+                <Smartphone className="w-4 h-4 text-emerald-600" /> KaiOS 2.5 Physical Keypad Controls
               </h4>
 
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                   <div className="font-semibold text-slate-800">Move Doodler Left</div>
-                  <div className="text-slate-500 mt-0.5">D-Pad Left / Key <kbd className="px-1.5 py-0.5 bg-white border rounded font-mono">4</kbd> / Key <kbd className="px-1.5 py-0.5 bg-white border rounded font-mono">A</kbd></div>
+                  <div className="text-slate-500 mt-0.5">D-Pad Left / Key <kbd className="px-1.5 py-0.5 bg-white border rounded font-mono">4</kbd> / <kbd className="px-1.5 py-0.5 bg-white border rounded font-mono">A</kbd></div>
                 </div>
 
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                   <div className="font-semibold text-slate-800">Move Doodler Right</div>
-                  <div className="text-slate-500 mt-0.5">D-Pad Right / Key <kbd className="px-1.5 py-0.5 bg-white border rounded font-mono">6</kbd> / Key <kbd className="px-1.5 py-0.5 bg-white border rounded font-mono">D</kbd></div>
+                  <div className="text-slate-500 mt-0.5">D-Pad Right / Key <kbd className="px-1.5 py-0.5 bg-white border rounded font-mono">6</kbd> / <kbd className="px-1.5 py-0.5 bg-white border rounded font-mono">D</kbd></div>
                 </div>
 
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                   <div className="font-semibold text-slate-800">Shoot Nose Pellets</div>
-                  <div className="text-slate-500 mt-0.5">D-Pad Center / Key <kbd className="px-1.5 py-0.5 bg-white border rounded font-mono">5</kbd> / Key <kbd className="px-1.5 py-0.5 bg-white border rounded font-mono">Space</kbd></div>
+                  <div className="text-slate-500 mt-0.5">D-Pad Center / Key <kbd className="px-1.5 py-0.5 bg-white border rounded font-mono">5</kbd> / <kbd className="px-1.5 py-0.5 bg-white border rounded font-mono">Space</kbd></div>
                 </div>
 
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <div className="font-semibold text-slate-800">Restart / Softkey Right</div>
+                  <div className="font-semibold text-slate-800">Restart Game</div>
                   <div className="text-slate-500 mt-0.5">SoftKey Right / Key <kbd className="px-1.5 py-0.5 bg-white border rounded font-mono">Backspace</kbd></div>
                 </div>
               </div>
@@ -502,137 +857,11 @@ export const KaiOSGame: React.FC = () => {
             <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 text-xs text-emerald-900 flex items-start gap-3">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
               <div>
-                <strong className="font-bold">KaiOS KaiStore Ready:</strong> Includes full support for <code className="font-mono text-emerald-800">manifest.webapp</code> (KaiOS 2.5) and <code className="font-mono text-emerald-800">manifest.json</code> (KaiOS 3.0), non-touch D-Pad input navigation, and automatic GitHub Actions CI/CD building.
+                <strong className="font-bold">KaiOS 2.5 Hardware Compatibility:</strong> Running on Phaser v3.24.1 WebGL renderer (`/public/lib/phaser-3.24.1.min.js`) powered by C asm.js physics simulation engine. Configured specifically for 240x320 QVGA screens and Firefox 48 Gecko engine.
               </div>
             </div>
           </div>
         </div>
-      )}
-
-      {/* C Memory Inspector Tab */}
-      {activeTab === 'c_memory' && (
-        <div className="w-full bg-slate-900 text-slate-100 p-5 rounded-xl border border-slate-800 font-mono text-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <h3 className="font-bold text-emerald-400 text-sm flex items-center gap-2">
-              <Terminal className="w-4 h-4" /> Live C Struct Memory Dump (<code className="text-slate-300">typedef struct GameState</code>)
-            </h3>
-            <span className="px-2 py-0.5 bg-emerald-950 text-emerald-400 rounded border border-emerald-800 text-[10px]">
-              60 FPS C Memory Sync
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-              <div className="text-slate-400 font-bold mb-2 text-[11px]">// Doodler Player C Struct</div>
-              <pre className="text-emerald-300 whitespace-pre-wrap">
-                {JSON.stringify(gameState?.player, null, 2)}
-              </pre>
-            </div>
-
-            <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-              <div className="text-slate-400 font-bold mb-2 text-[11px]">// Engine Metadata & Camera State</div>
-              <pre className="text-sky-300 whitespace-pre-wrap">
-                {JSON.stringify({
-                  score: gameState?.score,
-                  highScore: gameState?.highScore,
-                  cameraY: gameState?.cameraY,
-                  worldWidth: gameState?.worldWidth,
-                  worldHeight: gameState?.worldHeight,
-                  gameOver: gameState?.gameOver,
-                  activePlatformsCount: gameState?.platforms.length,
-                  activeBulletsCount: gameState?.bullets.length,
-                  activeMonstersCount: gameState?.monsters.length,
-                }, null, 2)}
-              </pre>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* C Source Code Tab */}
-      {activeTab === 'c_code' && (
-        <div className="w-full bg-slate-900 text-slate-100 p-5 rounded-xl border border-slate-800 font-mono text-xs space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-            <div className="font-bold text-emerald-400 flex items-center gap-2">
-              <FileCode className="w-4 h-4" /> c_src/doodle_engine.c
-            </div>
-            <span className="text-slate-400 text-[10px]">Pure C • Emscripten Exported</span>
-          </div>
-
-          <div className="max-h-96 overflow-y-auto bg-slate-950 p-4 rounded-lg border border-slate-800 text-slate-300">
-            <pre>{`#include "doodle_engine.h"
-#include <stdlib.h>
-#include <math.h>
-
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-#else
-#define EMSCRIPTEN_KEEPALIVE
-#endif
-
-static GameState state;
-
-EMSCRIPTEN_KEEPALIVE
-void init_game(int width, int height) {
-    state.world_width = width;
-    state.world_height = height;
-    state.score = 0;
-    state.player.x = width / 2.0f;
-    state.player.y = height - 120.0f;
-    state.player.vy = -650.0f;
-}
-
-EMSCRIPTEN_KEEPALIVE
-void update_game(float dt, int move_dir, bool shoot_pressed) {
-    if (state.game_over) return;
-    state.player.vx = move_dir * 360.0f;
-    state.player.x += state.player.vx * dt;
-    state.player.vy += 1200.0f * dt;
-    state.player.y += state.player.vy * dt;
-}`}</pre>
-          </div>
-        </div>
-      )}
-
-      {/* GitHub Actions Tab */}
-      {activeTab === 'github_actions' && (
-        <div className="w-full bg-slate-900 text-slate-100 p-5 rounded-xl border border-slate-800 font-mono text-xs space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-            <div className="font-bold text-emerald-400 flex items-center gap-2">
-              <GitBranch className="w-4 h-4" /> .github/workflows/build-kaios-asmjs.yml
-            </div>
-            <span className="text-slate-400 text-[10px]">Emscripten CI/CD Pipeline</span>
-          </div>
-
-          <div className="max-h-96 overflow-y-auto bg-slate-950 p-4 rounded-lg border border-slate-800 text-slate-300">
-            <pre>{`name: Compile C Doodle Jump Engine for KaiOS (asm.js)
-
-on:
-  push:
-    branches: [ main, master ]
-
-jobs:
-  build-kaios-asmjs:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: mymindstorm/setup-emsdk@v14
-        with:
-          version: 3.1.45
-
-      - name: Compile C Game Engine to asm.js
-        run: |
-          mkdir -p public/kaios_asmjs
-          emcc c_src/doodle_engine.c -I c_src -O3 -s WASM=0 -s LEGACY_GL_EMULATION=1 -s ERROR_ON_UNDEFINED_SYMBOLS=0 -s EXPORTED_FUNCTIONS="['_init_game','_update_game','_get_game_state','_reset_game','_shoot_bullet','_malloc','_free']" -o public/kaios_asmjs/doodle_engine.asm.js
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: doodle-jump-kaios-asmjs-bundle
-          path: doodle_jump_kaios.zip`}</pre>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
