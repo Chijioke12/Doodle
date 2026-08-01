@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "launch_path": "/index.html",
   "type": "web",
+  "origin": "app://doodlejump.kaios",
   "fullscreen": "true",
   "precompile": [
     "/lib/phaser-3.24.1.min.js",
@@ -11,22 +12,19 @@
     "/kaios_asmjs/doodle_engine.js"
   ],
   "icons": {
-    "56": "/api/assets/doodle_right.png",
-    "112": "/api/assets/doodle_right.png"
+    "56": "/icon56.png",
+    "112": "/icon112.png"
   },
   "developer": {
-    "name": "Google AI Studio C Engine Dev",
+    "name": "Doodle Jump Dev",
     "url": "https://ai.studio"
   },
   "locales": {
     "en-US": {
       "name": "Doodle Jump",
-      "description": "Fast D-Pad Doodle Jump with asm.js C Engine"
+      "description": "Doodle Jump for KaiOS"
     }
   },
   "default_locale": "en-US",
-  "permissions": {
-    "device-storage:apps": { "access": "readwrite" }
-  },
   "orientation": ["portrait-primary"]
 }

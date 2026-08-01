@@ -8,12 +8,12 @@
   "theme_color": "#10b981",
   "icons": [
     {
-      "src": "/api/assets/doodle_right.png",
+      "src": "/icon56.png",
       "sizes": "56x56",
       "type": "image/png"
     },
     {
-      "src": "/api/assets/doodle_right.png",
+      "src": "/icon112.png",
       "sizes": "112x112",
       "type": "image/png"
     }
