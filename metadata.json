@@ -1,0 +1,6 @@
+{
+  "name": "Doodle Jump Canvas Generator",
+  "description": "Backend Node.js Canvas asset generator and live sprite browser for Doodle Jump assets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

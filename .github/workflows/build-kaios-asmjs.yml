@@ -1,0 +1,62 @@
+name: Compile C Doodle Jump Engine for KaiOS (asm.js)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-kaios-asmjs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v3
+
+      - name: Setup Emscripten SDK (emsdk)
+        uses: mymindstorm/setup-emsdk@v12
+        with:
+          version: 3.1.45
+
+      - name: Verify Emscripten Compiler
+        run: emcc -v
+
+      - name: Compile C Game Engine to asm.js for KaiOS 2.5 (Firefox 48 Gecko)
+        run: |
+          mkdir -p public/kaios_asmjs
+          emcc c_src/doodle_engine.c \
+            -I c_src \
+            -O3 \
+            -s WASM=0 \
+            -s LEGACY_GL_EMULATION=1 \
+            -s EXPORTED_FUNCTIONS="['_init_game', '_update_game', '_get_game_state', '_reset_game', '_shoot_bullet']" \
+            -s EXPORTED_RUNTIME_METHODS="['cwrap', 'getValue', 'setValue']" \
+            -o public/kaios_asmjs/doodle_engine.asm.js
+
+      - name: Compile C Game Engine to WebAssembly for KaiOS 3.0
+        run: |
+          emcc c_src/doodle_engine.c \
+            -I c_src \
+            -O3 \
+            -s WASM=1 \
+            -s EXPORTED_FUNCTIONS="['_init_game', '_update_game', '_get_game_state', '_reset_game', '_shoot_bullet']" \
+            -s EXPORTED_RUNTIME_METHODS="['cwrap', 'getValue', 'setValue']" \
+            -o public/kaios_asmjs/doodle_engine.js
+
+      - name: Create KaiOS Open Web App Package (.zip)
+        run: |
+          mkdir -p build/kaios_app
+          cp -r public/kaios_asmjs build/kaios_app/
+          cp public/manifest.webapp build/kaios_app/
+          cp public/manifest.json build/kaios_app/
+          cd build/kaios_app && zip -r ../../doodle_jump_kaios.zip .
+
+      - name: Upload KaiOS asm.js Bundle Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: doodle-jump-kaios-asmjs-bundle
+          path: |
+            public/kaios_asmjs/
+            doodle_jump_kaios.zip

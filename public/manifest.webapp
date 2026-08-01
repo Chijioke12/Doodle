@@ -1,0 +1,27 @@
+{
+  "name": "Doodle Jump C Engine",
+  "description": "Classic Doodle Jump game for KaiOS feature phones compiled from C to asm.js",
+  "version": "1.0.0",
+  "launch_path": "/index.html",
+  "type": "web",
+  "icons": {
+    "56": "/api/assets/doodle_right.png",
+    "112": "/api/assets/doodle_right.png"
+  },
+  "developer": {
+    "name": "Google AI Studio C Engine Dev",
+    "url": "https://ai.studio"
+  },
+  "locales": {
+    "en-US": {
+      "name": "Doodle Jump",
+      "description": "Fast D-Pad Doodle Jump with asm.js C Engine"
+    }
+  },
+  "default_locale": "en-US",
+  "permissions": {
+    "device-storage:apps": { "access": "readwrite" }
+  },
+  "fullscreen": "true",
+  "orientation": ["portrait-primary"]
+}
