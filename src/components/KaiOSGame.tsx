@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { CDoodleEngine, CGameState } from '../utils/cEngineAdapter';
 import { sfx } from '../utils/audio';
+import { getAssetCanvas, ASSET_METAS } from '../utils/proceduralAssetDataUrl';
 import {
   Smartphone,
   RotateCcw,
@@ -176,11 +177,15 @@ export const KaiOSGame: React.FC<KaiOSGameProps> = ({ pureMode = false, onToggle
         }
 
         preload() {
-          // Preload KaiOS assets from Express canvas endpoints
-          this.load.image('doodle_right', '/api/assets/doodle_right.png');
-          this.load.image('doodle_left', '/api/assets/doodle_left.png');
-          this.load.image('platform_green', '/api/assets/platform_green.png');
-          this.load.image('platform_blue', '/api/assets/platform_blue.png');
+          // Register all KaiOS game textures directly from HTML canvas elements (no data URL loader warnings)
+          ASSET_METAS.forEach((meta) => {
+            if (!this.textures.exists(meta.id)) {
+              const canvas = getAssetCanvas(meta.id);
+              if (canvas) {
+                this.textures.addCanvas(meta.id, canvas);
+              }
+            }
+          });
         }
 
         create() {
